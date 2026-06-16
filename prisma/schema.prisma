@@ -1,0 +1,72 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id                String     @id @default(uuid())
+  username          String
+  email             String     @unique
+  githubUsername    String
+  githubAccessToken String
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+  pipelines         Pipeline[]
+}
+
+model Pipeline {
+  id         String        @id @default(uuid())
+  name       String
+  repoUrl    String
+  yamlConfig String
+  userId     String
+  user       User          @relation(fields: [userId], references: [id])
+  runs       PipelineRun[]
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+}
+
+enum RunStatus {
+  QUEUED
+  RUNNING
+  SUCCESS
+  FAILED
+}
+
+model PipelineRun {
+  id          String         @id @default(uuid())
+  status      RunStatus      @default(QUEUED)
+  pipelineId  String
+  pipeline    Pipeline       @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  steps       PipelineStep[]
+  startedAt   DateTime?
+  completedAt DateTime?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+}
+
+enum StepStatus {
+  PENDING
+  RUNNING
+  SUCCESS
+  FAILED
+}
+
+model PipelineStep {
+  id          String     @id @default(uuid())
+  name        String
+  command     String
+  status      StepStatus @default(PENDING)
+  logs        String?
+  runId       String
+  run         PipelineRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  order       Int
+  startedAt   DateTime?
+  completedAt DateTime?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+}
