@@ -23,6 +23,7 @@ model Pipeline {
   name       String
   repoUrl    String
   yamlConfig String
+  webhookId  String?
   userId     String
   user       User          @relation(fields: [userId], references: [id])
   runs       PipelineRun[]
