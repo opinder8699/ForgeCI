@@ -60,6 +60,7 @@ model PipelineStep {
   id          String     @id @default(uuid())
   name        String
   command     String
+  image       String
   status      StepStatus @default(PENDING)
   logs        String?
   runId       String
