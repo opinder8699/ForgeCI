@@ -42,6 +42,7 @@ model PipelineRun {
   id          String         @id @default(uuid())
   status      RunStatus      @default(QUEUED)
   pipelineId  String
+  branch      String?
   pipeline    Pipeline       @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
   steps       PipelineStep[]
   startedAt   DateTime?
