@@ -2,7 +2,7 @@ const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
 const morgan = require("morgan");
-const cookieParser = require("cookie-parser");
+const cookieParser = require("cookie-parser"); 
 
 const authRouter = require("./src/modules/auth/auth.routes.js");
 const pipelineRoutes = require("./src/modules/pipeline/pipeline.routes");
