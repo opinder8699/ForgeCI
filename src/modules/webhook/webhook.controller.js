@@ -1,6 +1,7 @@
 const prisma = require("../../lib/prisma");
 const parsePipeline = require("../../utils/parsePipeline.js");
 const verifyGithubSignature = require("../../utils/verifyGithubSignature");
+const pipelineQueue = require("../queue/pipeline.queue.js");
 
 exports.githubWebhook = async (req, res) => {
   try {
@@ -64,6 +65,10 @@ exports.githubWebhook = async (req, res) => {
         image: step.image,
         order: i + 1,
       })),
+    });
+
+    const job = await pipelineQueue.add("pipeline-run", {
+      runId: run.id,
     });
 
     return res.status(200).json({
