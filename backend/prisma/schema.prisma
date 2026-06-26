@@ -24,6 +24,7 @@ model Pipeline {
   repoUrl    String
   yamlConfig String
   webhookId  String?
+  branch     String        @default("main")
   userId     String
   user       User          @relation(fields: [userId], references: [id])
   runs       PipelineRun[]
@@ -42,7 +43,6 @@ model PipelineRun {
   id          String         @id @default(uuid())
   status      RunStatus      @default(QUEUED)
   pipelineId  String
-  branch      String?
   pipeline    Pipeline       @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
   steps       PipelineStep[]
   startedAt   DateTime?

@@ -4,6 +4,7 @@ const validatePipeline = require("../../utils/validatePipeline");
 const registerWebhook = require("../../utils/registerWebhook.js");
 const deleteWebhook = require("../../utils/deleteWebhook.js");
 const { decrypt } = require("../../utils/encryption.js");
+const pipelineQueue=require("../queue/pipeline.queue.js")
 
 exports.createPipeline = async (req, res) => {
   try {
@@ -17,6 +18,7 @@ exports.createPipeline = async (req, res) => {
       data: {
         name: parsedConfig.name,
         repoUrl,
+        branch: req.body.branch ?? "main",
         yamlConfig,
         userId: req.user.userId,
       },
@@ -75,7 +77,7 @@ exports.createPipeline = async (req, res) => {
     }
     return res
       .status(500)
-      .json({ success: false, message: "Internal server error" });
+      .json({ success: false,  message: "Internal Server Error"});
   }
 };
 
@@ -99,6 +101,7 @@ exports.getPipelines = async (req, res) => {
       id: p.id,
       name: p.name,
       repoUrl: p.repoUrl,
+      branch: p.branch,
       createdAt: p.createdAt,
       lastRunStatus: p.runs[0]?.status ?? null,
       lastRunAt: p.runs[0]?.createdAt ?? null,
@@ -134,6 +137,7 @@ exports.getPipelineById = async (req, res) => {
         id: pipeline.id,
         name: pipeline.name,
         repoUrl: pipeline.repoUrl,
+        branch: pipeline.branch,
         yamlConfig: pipeline.yamlConfig,
         lastRunStatus: pipeline.runs[0]?.status ?? null,
         lastRunAt: pipeline.runs[0]?.createdAt ?? null,
@@ -163,7 +167,6 @@ exports.getPipelineRuns = async (req, res) => {
       select: {
         id: true,
         status: true,
-        branch: true,
         createdAt: true,
         startedAt: true,
         completedAt: true,
@@ -182,7 +185,7 @@ exports.getPipelineRuns = async (req, res) => {
     return res.json({ runs: result });
   } catch (error) {
     console.error(error);
-    return res.status(500).json({ message: "Internal server error" });
+    return res.status(500).json({ message: "Internal Server Error" });
   }
 };
 
@@ -203,7 +206,6 @@ exports.triggerRun = async (req, res) => {
     const run = await prisma.pipelineRun.create({
       data: {
         pipelineId: pipeline.id,
-        branch: req.body.branch ?? "main",
         steps: {
           create: steps.map((step, i) => ({
             name: step.name,
@@ -219,7 +221,7 @@ exports.triggerRun = async (req, res) => {
 
     return res.status(201).json({ run });
   } catch (error) {
-    console.error(error);
-    return res.status(500).json({ message: "Internal server error" });
+    console.error(error.message);
+    return res.status(500).json({ message: "Internal Server Error"});
   }
 };

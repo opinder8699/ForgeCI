@@ -1,7 +1,7 @@
 const { Server } = require("socket.io");
 const cookie = require("cookie");
 const jwt = require("jsonwebtoken");
-const createConnection = require("../config/redis");
+const { createRedisConnection } = require("../config/redis");
 const prisma=require("../lib/prisma")
 
 function setupSocket(httpServer) {
@@ -64,7 +64,7 @@ function setupSocket(httpServer) {
   });
 
   // ── 3. One shared Redis subscriber connection, pattern-subscribes to all run channels
-  const subscriber = createConnection();
+  const subscriber = createRedisConnection();
   subscriber.psubscribe("run:*");
 
   subscriber.on("pmessage", (pattern, channel, message) => {

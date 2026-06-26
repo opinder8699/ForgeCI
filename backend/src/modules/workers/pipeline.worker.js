@@ -1,19 +1,18 @@
-const { Worker, UnrecoverableError } = require("bullmq");
-require("dotenv").config();
-const createConnection = require("../../config/redis");
+require("dotenv").config({ path: require("path").resolve(__dirname, "../../../.env") });
+const { createBullMQConnection, createRedisConnection } = require("../../config/redis");
 const executeStep = require("../../utils/executeStep");
 const prisma = require("../../lib/prisma");
 const Docker = require("dockerode");
+
 const docker = new Docker();
+const workerConnection = createBullMQConnection();
+const publisher = createRedisConnection();
 
-const connection = createConnection();
-const publisher = createConnection();
-
-const PIPELINE_TIMEOUT_MS = 20 * 60 * 1000; // 20 minutes max per pipeline
+const PIPELINE_TIMEOUT_MS = 20 * 60 * 1000;
 
 async function cloneRepo(repoUrl, branch, volumeName) {
   let container;
-
+  console.log("[Worker] Started cloning...");
   try {
     container = await docker.createContainer({
       Image: "alpine/git",
@@ -25,28 +24,26 @@ async function cloneRepo(repoUrl, branch, volumeName) {
 
     await container.start();
     const result = await container.wait();
-
-    const logs = await container.logs({
-      stdout: true,
-      stderr: true,
-    });
-
+    const logs = await container.logs({ stdout: true, stderr: true });
     const output = logs.toString();
 
     if (result.StatusCode !== 0) {
       throw new Error(`Repository clone failed: ${output}`);
     }
 
+    console.log("[Worker] Cloned repo successfully");
     return output;
   } finally {
     if (container) {
-      await container.remove({ force: true });
+      await container.remove({ force: true }).catch(() => {});
     }
   }
 }
 
 async function processRun(job) {
+   console.log("[Worker] processRun started");
   const { runId } = job.data;
+    console.log("[Worker] runId:", runId);
 
   const run = await prisma.pipelineRun.findUnique({
     where: { id: runId },
@@ -56,12 +53,13 @@ async function processRun(job) {
     },
   });
 
-  if (!run) {
-    throw new Error("Run not found");
-  }
+  if (!run) throw new Error(`Run ${runId} not found`);
+
+  console.log(`[Worker] Run ${runId} — repo: ${run.pipeline.repoUrl}, branch: ${run.pipeline.branch}`);
 
   const volumeName = `pipeline-${runId}-workspace`;
   await docker.createVolume({ Name: volumeName });
+  console.log("[Worker] Volume created");
 
   try {
     await prisma.pipelineRun.update({
@@ -69,10 +67,12 @@ async function processRun(job) {
       data: { status: "RUNNING", startedAt: new Date() },
     });
 
-    await cloneRepo(run.pipeline.repoUrl, run.branch, volumeName);
+    await cloneRepo(run.pipeline.repoUrl, run.pipeline.branch, volumeName);
 
     for (const step of run.steps) {
       if (step.status === "SUCCESS") continue;
+
+      console.log(`[Worker] Running step: ${step.name}`);
 
       await prisma.pipelineStep.update({
         where: { id: step.id },
@@ -83,35 +83,31 @@ async function processRun(job) {
 
       await publisher.publish(
         `run:${runId}`,
-        JSON.stringify({ stepId: step.id, logs: result.logs }),
+        JSON.stringify({ stepId: step.id, stepName: step.name, logs: result.logs })
       );
 
       if (result.exitCode !== 0) {
         await prisma.pipelineStep.update({
           where: { id: step.id },
-          data: {
-            status: "FAILED",
-            logs: result.logs,
-            completedAt: new Date(),
-          },
+          data: { status: "FAILED", logs: result.logs, completedAt: new Date() },
         });
-
         await prisma.pipelineRun.update({
           where: { id: runId },
           data: { status: "FAILED", completedAt: new Date() },
         });
-
-        throw new Error(`Step ${step.name} failed`);
+        await publisher.publish(
+          `run:${runId}`,
+          JSON.stringify({ type: "RUN_COMPLETED", status: "FAILED", runId, error: `Step "${step.name}" failed` })
+        );
+        throw new Error(`Step "${step.name}" failed with exit code ${result.exitCode}`);
       }
 
       await prisma.pipelineStep.update({
         where: { id: step.id },
-        data: {
-          status: "SUCCESS",
-          logs: result.logs,
-          completedAt: new Date(),
-        },
+        data: { status: "SUCCESS", logs: result.logs, completedAt: new Date() },
       });
+
+      console.log(`[Worker] Step "${step.name}" succeeded`);
     }
 
     await prisma.pipelineRun.update({
@@ -121,28 +117,19 @@ async function processRun(job) {
 
     await publisher.publish(
       `run:${runId}`,
-      JSON.stringify({ type: "RUN_COMPLETED", status: "SUCCESS", runId }),
+      JSON.stringify({ type: "RUN_COMPLETED", status: "SUCCESS", runId })
     );
 
+    console.log(`[Worker] Run ${runId} completed successfully`);
   } catch (error) {
     await prisma.pipelineRun.update({
       where: { id: runId },
       data: { status: "FAILED", completedAt: new Date() },
-    });
-
-    await publisher.publish(
-      `run:${runId}`,
-      JSON.stringify({
-        type: "RUN_COMPLETED",
-        status: "FAILED",
-        runId,
-        error: error.message,
-      }),
-    );
+    }).catch(() => {});
 
     throw error;
   } finally {
-    await docker.getVolume(volumeName).remove();
+    await docker.getVolume(volumeName).remove().catch(() => {});
   }
 
   return { success: true };
@@ -151,9 +138,8 @@ async function processRun(job) {
 const worker = new Worker(
   "pipeline-queue",
   async (job) => {
-    console.log(`Processing Job ${job.id}`);
+    console.log(`[Worker] Processing job ${job.id}`);
 
-    // pipeline-level timeout — wraps the entire processRun function
     const timeoutPromise = new Promise((_, reject) =>
       setTimeout(
         () => reject(new Error("PIPELINE_TIMEOUT")),
@@ -165,12 +151,10 @@ const worker = new Worker(
       return await Promise.race([processRun(job), timeoutPromise]);
     } catch (error) {
       if (error.message === "PIPELINE_TIMEOUT") {
-        // mark run failed in DB before throwing unrecoverable
         await prisma.pipelineRun.update({
           where: { id: job.data.runId },
           data: { status: "FAILED", completedAt: new Date() },
         });
-
         await publisher.publish(
           `run:${job.data.runId}`,
           JSON.stringify({
@@ -178,25 +162,26 @@ const worker = new Worker(
             status: "FAILED",
             runId: job.data.runId,
             error: "Pipeline exceeded time budget",
-          }),
+          })
         );
-
-        // UnrecoverableError — BullMQ will NOT retry this job
         throw new UnrecoverableError("Pipeline exceeded time budget");
       }
-
-      throw error; // non-timeout errors still get retried per attempts: 3
+      throw error;
     }
   },
-  { connection, concurrency: 3 },
+  { connection: workerConnection, concurrency: 3 } // ← was { workerConnection } which is wrong
 );
 
 worker.on("completed", (job) => {
-  console.log(`Job ${job.id} completed`);
+  console.log(`[Worker] Job ${job.id} completed`);
 });
 
 worker.on("failed", (job, err) => {
-  console.log(`Job ${job?.id} failed: ${err.message}`);
+  console.error(`[Worker] Job ${job?.id} failed: ${err.message}`);
+});
+
+worker.on("error", (err) => {
+  console.error(`[Worker] Worker error: ${err.message}`);
 });
 
 console.log("Pipeline worker started...");

@@ -46,11 +46,10 @@ exports.githubWebhook = async (req, res) => {
         message: "Pipeline not found",
       });
     }
-    const branch = payload.ref.replace("refs/heads/", "");
+   
     const run = await prisma.pipelineRun.create({
       data: {
         pipelineId: pipeline.id,
-        branch,
       },
     });
 
