@@ -1,0 +1,94 @@
+@import "./theme.css";
+
+.back-link {
+  display: inline-block;
+  color: var(--text-muted);
+  text-decoration: none;
+  font-size: 0.85rem;
+  margin-bottom: 20px;
+  transition: color 0.2s ease;
+}
+
+.back-link:hover {
+  color: var(--text-primary);
+}
+
+.pipeline-meta {
+  display: flex;
+  gap: 40px;
+  padding: 22px 26px;
+  margin-bottom: 36px;
+  flex-wrap: wrap;
+}
+
+.pipeline-meta > div {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.meta-label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-faint);
+  font-weight: 600;
+}
+
+.meta-value {
+  color: var(--text-primary);
+  font-size: 0.92rem;
+}
+
+.meta-value.mono {
+  font-family: ui-monospace, "Consolas", monospace;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+}
+
+.section-title {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin: 0 0 16px;
+  color: var(--text-primary);
+}
+
+.run-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.run-row {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 14px 20px;
+  text-decoration: none;
+  color: inherit;
+  transition: all 0.2s ease;
+}
+
+.run-row:hover {
+  background: var(--bg-card-hover);
+  transform: translateX(4px);
+}
+
+.run-id {
+  color: var(--text-secondary);
+  font-family: ui-monospace, "Consolas", monospace;
+  font-size: 0.85rem;
+}
+
+.run-time {
+  color: var(--text-faint);
+  font-size: 0.82rem;
+  margin-left: auto;
+}
+
+.run-duration {
+  color: var(--text-faint);
+  font-size: 0.82rem;
+  min-width: 40px;
+  text-align: right;
+}

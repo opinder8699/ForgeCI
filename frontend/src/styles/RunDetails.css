@@ -1,0 +1,81 @@
+@import "./theme.css";
+
+.log-console {
+  overflow: hidden;
+  margin-top: 24px;
+}
+
+.log-console-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 18px;
+  background: rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid var(--border-softer);
+}
+
+.log-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.log-dot.red {
+  background: #ef4444;
+}
+
+.log-dot.yellow {
+  background: #f59e0b;
+}
+
+.log-dot.green {
+  background: #22c55e;
+}
+
+.log-console-title {
+  margin-left: 8px;
+  font-size: 0.78rem;
+  color: var(--text-faint);
+  font-family: ui-monospace, "Consolas", monospace;
+}
+
+.live-indicator {
+  margin-left: auto;
+  font-size: 0.72rem;
+  color: var(--running);
+  font-weight: 600;
+}
+
+.log-console-body {
+  padding: 18px 20px;
+  max-height: 480px;
+  overflow-y: auto;
+  font-family: ui-monospace, "Consolas", monospace;
+  font-size: 0.84rem;
+  line-height: 1.6;
+  background: rgba(2, 6, 15, 0.4);
+}
+
+.log-empty {
+  color: var(--text-faint);
+  margin: 0;
+}
+
+.log-line {
+  display: flex;
+  gap: 16px;
+}
+
+.log-line-number {
+  color: var(--text-faint);
+  user-select: none;
+  min-width: 28px;
+  text-align: right;
+  opacity: 0.5;
+}
+
+.log-line-text {
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  word-break: break-all;
+}

@@ -5,7 +5,7 @@ const setupSocket = require("./src/socket/socket");
 
 const app = require("./app");
 const httpServer = http.createServer(app)
-setupSocket(httpServer)
+setupSocket(httpServer);
 
 const PORT = process.env.PORT || 5000;
 

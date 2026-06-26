@@ -1,4 +1,4 @@
-const { Worker } = require("bullmq");
+const { Worker, UnrecoverableError } = require("bullmq");
 require("dotenv").config();
 const createConnection = require("../../config/redis");
 const executeStep = require("../../utils/executeStep");
@@ -7,7 +7,9 @@ const Docker = require("dockerode");
 const docker = new Docker();
 
 const connection = createConnection();
-const publisher = createConnection(); // separate connection for pub/sub
+const publisher = createConnection();
+
+const PIPELINE_TIMEOUT_MS = 20 * 60 * 1000; // 20 minutes max per pipeline
 
 async function cloneRepo(repoUrl, branch, volumeName) {
   let container;
@@ -15,16 +17,13 @@ async function cloneRepo(repoUrl, branch, volumeName) {
   try {
     container = await docker.createContainer({
       Image: "alpine/git",
-
       Cmd: ["clone", "--branch", branch, "--depth", "1", repoUrl, "/workspace"],
-
       HostConfig: {
         Binds: [`${volumeName}:/workspace`],
       },
     });
 
     await container.start();
-
     const result = await container.wait();
 
     const logs = await container.logs({
@@ -41,11 +40,112 @@ async function cloneRepo(repoUrl, branch, volumeName) {
     return output;
   } finally {
     if (container) {
-      await container.remove({
-        force: true,
-      });
+      await container.remove({ force: true });
     }
   }
+}
+
+async function processRun(job) {
+  const { runId } = job.data;
+
+  const run = await prisma.pipelineRun.findUnique({
+    where: { id: runId },
+    include: {
+      pipeline: true,
+      steps: { orderBy: { order: "asc" } },
+    },
+  });
+
+  if (!run) {
+    throw new Error("Run not found");
+  }
+
+  const volumeName = `pipeline-${runId}-workspace`;
+  await docker.createVolume({ Name: volumeName });
+
+  try {
+    await prisma.pipelineRun.update({
+      where: { id: runId },
+      data: { status: "RUNNING", startedAt: new Date() },
+    });
+
+    await cloneRepo(run.pipeline.repoUrl, run.branch, volumeName);
+
+    for (const step of run.steps) {
+      if (step.status === "SUCCESS") continue;
+
+      await prisma.pipelineStep.update({
+        where: { id: step.id },
+        data: { status: "RUNNING", startedAt: new Date() },
+      });
+
+      const result = await executeStep(step, volumeName);
+
+      await publisher.publish(
+        `run:${runId}`,
+        JSON.stringify({ stepId: step.id, logs: result.logs }),
+      );
+
+      if (result.exitCode !== 0) {
+        await prisma.pipelineStep.update({
+          where: { id: step.id },
+          data: {
+            status: "FAILED",
+            logs: result.logs,
+            completedAt: new Date(),
+          },
+        });
+
+        await prisma.pipelineRun.update({
+          where: { id: runId },
+          data: { status: "FAILED", completedAt: new Date() },
+        });
+
+        throw new Error(`Step ${step.name} failed`);
+      }
+
+      await prisma.pipelineStep.update({
+        where: { id: step.id },
+        data: {
+          status: "SUCCESS",
+          logs: result.logs,
+          completedAt: new Date(),
+        },
+      });
+    }
+
+    await prisma.pipelineRun.update({
+      where: { id: runId },
+      data: { status: "SUCCESS", completedAt: new Date() },
+    });
+
+    await publisher.publish(
+      `run:${runId}`,
+      JSON.stringify({ type: "RUN_COMPLETED", status: "SUCCESS", runId }),
+    );
+
+  } catch (error) {
+    await prisma.pipelineRun.update({
+      where: { id: runId },
+      data: { status: "FAILED", completedAt: new Date() },
+    });
+
+    await publisher.publish(
+      `run:${runId}`,
+      JSON.stringify({
+        type: "RUN_COMPLETED",
+        status: "FAILED",
+        runId,
+        error: error.message,
+      }),
+    );
+
+    throw error;
+  } finally {
+    await docker.getVolume(volumeName).remove();
+  }
+
+  return { success: true };
 }
 
 const worker = new Worker(
@@ -53,111 +153,40 @@ const worker = new Worker(
   async (job) => {
     console.log(`Processing Job ${job.id}`);
 
-    const { runId } = job.data;
-
-    const run = await prisma.pipelineRun.findUnique({
-      where: { id: runId },
-      include: {
-        pipeline: true,
-        steps: { orderBy: { order: "asc" } },
-      },
-    });
-
-    if (!run) {
-      throw new Error("Run not found");
-    }
-
-    const volumeName = `pipeline-${runId}-workspace`;
-    await docker.createVolume({ Name: volumeName });
+    // pipeline-level timeout — wraps the entire processRun function
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(
+        () => reject(new Error("PIPELINE_TIMEOUT")),
+        PIPELINE_TIMEOUT_MS
+      )
+    );
 
     try {
-      await prisma.pipelineRun.update({
-        where: { id: runId },
-        data: { status: "RUNNING", startedAt: new Date() },
-      });
-
-      await cloneRepo(run.pipeline.repoUrl, run.branch, volumeName);
-
-      for (const step of run.steps) {
-        if (step.status === "SUCCESS") continue;
-
-        await prisma.pipelineStep.update({
-          where: { id: step.id },
-          data: { status: "RUNNING", startedAt: new Date() },
+      return await Promise.race([processRun(job), timeoutPromise]);
+    } catch (error) {
+      if (error.message === "PIPELINE_TIMEOUT") {
+        // mark run failed in DB before throwing unrecoverable
+        await prisma.pipelineRun.update({
+          where: { id: job.data.runId },
+          data: { status: "FAILED", completedAt: new Date() },
         });
-
-        const result = await executeStep(step, volumeName);
 
         await publisher.publish(
-          `run:${runId}`,
-          JSON.stringify({ stepId: step.id, logs: result.logs }),
+          `run:${job.data.runId}`,
+          JSON.stringify({
+            type: "RUN_COMPLETED",
+            status: "FAILED",
+            runId: job.data.runId,
+            error: "Pipeline exceeded time budget",
+          }),
         );
 
-        if (result.exitCode !== 0) {
-          await prisma.pipelineStep.update({
-            where: { id: step.id },
-            data: {
-              status: "FAILED",
-              logs: result.logs,
-              completedAt: new Date(),
-            },
-          });
-
-          await prisma.pipelineRun.update({
-            where: { id: runId },
-            data: { status: "FAILED", completedAt: new Date() },
-          });
-
-          throw new Error(`Step ${step.name} failed`);
-        }
-
-        await prisma.pipelineStep.update({
-          where: { id: step.id },
-          data: {
-            status: "SUCCESS",
-            logs: result.logs,
-            completedAt: new Date(),
-          },
-        });
+        // UnrecoverableError — BullMQ will NOT retry this job
+        throw new UnrecoverableError("Pipeline exceeded time budget");
       }
 
-      await prisma.pipelineRun.update({
-        where: { id: runId },
-        data: { status: "SUCCESS", completedAt: new Date() },
-      });
-      await publisher.publish(
-        `run:${runId}`,
-        JSON.stringify({
-          type: "RUN_COMPLETED",
-
-          status: "SUCCESS",
-
-          runId,
-        }),
-      );
-    } catch (error) {
-      await prisma.pipelineRun.update({
-        where: { id: runId },
-        data: { status: "FAILED", completedAt: new Date() },
-      });
-      await publisher.publish(
-        `run:${runId}`,
-        JSON.stringify({
-          type: "RUN_COMPLETED",
-
-          status: "FAILED",
-
-          runId,
-
-          error: error.message,
-        }),
-      );
-      throw error; // still let BullMQ know it failed, for retry logic
-    } finally {
-      await docker.getVolume(volumeName).remove();
+      throw error; // non-timeout errors still get retried per attempts: 3
     }
-
-    return { success: true };
   },
   { connection, concurrency: 3 },
 );
@@ -167,8 +196,7 @@ worker.on("completed", (job) => {
 });
 
 worker.on("failed", (job, err) => {
-  console.log(`Job ${job?.id} failed`);
-  console.log(err.message);
+  console.log(`Job ${job?.id} failed: ${err.message}`);
 });
 
 console.log("Pipeline worker started...");

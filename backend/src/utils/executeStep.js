@@ -10,7 +10,7 @@ async function executeStep(step, volumeName) {
       Image: step.image,
       Cmd: ["sleep", "infinity"],
       WorkingDir: "/workspace",
-      HostConfig: {
+      HostConfig: { 
         Memory: 100 * 1024 * 1024,
         MemorySwap: 100 * 1024 * 1024,
         CpuPeriod: 100000,

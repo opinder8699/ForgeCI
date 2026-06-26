@@ -3,6 +3,8 @@ const jwt = require("jsonwebtoken");
 const prisma = require("../../lib/prisma");
 const { encrypt } = require("../../utils/encryption");
 
+const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:5173";
+
 const githubLogin = async (req, res) => {
   const githubUrl =
     `https://github.com/login/oauth/authorize` +
@@ -17,121 +19,79 @@ const githubCallback = async (req, res) => {
     const { code } = req.query;
 
     if (!code) {
-      return res.status(400).json({
-        message: "Authorization code missing",
-      });
+      return res.redirect(`${FRONTEND_URL}/?error=missing_code`);
     }
 
-    // token exchange
-
+    // Exchange code for GitHub access token
     const tokenResponse = await axios.post(
       "https://github.com/login/oauth/access_token",
       {
         client_id: process.env.GITHUB_CLIENT_ID,
-
         client_secret: process.env.GITHUB_CLIENT_SECRET,
-
         code,
       },
-      {
-        headers: {
-          Accept: "application/json",
-        },
-      },
+      { headers: { Accept: "application/json" } }
     );
 
     const accessToken = tokenResponse.data.access_token;
 
-    const encryptedToken = encrypt(accessToken);
-
-    // github user
-
-    const githubUserResponse = await axios.get("https://api.github.com/user", {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
-    });
-
-    const githubUser = githubUserResponse.data;
-
-    // email
-
-    const emailResponse = await axios.get(
-      "https://api.github.com/user/emails",
-      {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      },
-    );
-
-    const primaryEmail = emailResponse.data.find((email) => email.primary);
-
-    if (!primaryEmail) {
-      return res.status(400).json({
-        message: "No primary email found",
-      });
+    if (!accessToken) {
+      return res.redirect(`${FRONTEND_URL}/?error=oauth_failed`);
     }
 
-    const user = await prisma.user.upsert({
-      where: {
-        email: primaryEmail.email,
-      },
+    const encryptedToken = encrypt(accessToken);
 
+    // Fetch GitHub user profile
+    const githubUserResponse = await axios.get("https://api.github.com/user", {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    const githubUser = githubUserResponse.data;
+
+    // Fetch primary email (not always in the profile)
+    const emailResponse = await axios.get("https://api.github.com/user/emails", {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    const primaryEmail = emailResponse.data.find((e) => e.primary);
+
+    if (!primaryEmail) {
+      return res.redirect(`${FRONTEND_URL}/?error=no_email`);
+    }
+
+    // Upsert user in DB
+    const user = await prisma.user.upsert({
+      where: { email: primaryEmail.email },
       update: {
         githubAccessToken: encryptedToken,
-
         githubUsername: githubUser.login,
-
         username: githubUser.login,
       },
-
       create: {
         username: githubUser.login,
-
         email: primaryEmail.email,
-
         githubUsername: githubUser.login,
-
         githubAccessToken: encryptedToken,
       },
     });
 
+    // Sign a JWT and set it as an httpOnly cookie
     const token = jwt.sign(
-      {
-        userId: user.id,
-
-        email: user.email,
-      },
-
+      { userId: user.id, email: user.email },
       process.env.JWT_SECRET,
-
-      {
-        expiresIn: "7d",
-      },
+      { expiresIn: "7d" }
     );
+
     res.cookie("token", token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
-      sameSite: "strict",
-      maxAge: 7 * 24 * 60 * 60 * 1000,
+      sameSite: process.env.NODE_ENV === "production" ? "strict" : "lax",
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
     });
 
-    const safeUser = {
-      id: user.id,
-      username: user.username,
-      email: user.email,
-      githubUsername: user.githubUsername,
-    };
-    return res.json({
-      user: safeUser,
-    });
+    // Redirect browser back into the React app — AuthContext will call /me and pick up the session
+    return res.redirect(`${FRONTEND_URL}/dashboard`);
   } catch (error) {
-    console.error(error.response?.data || error.message || error);
-
-    return res.status(500).json({
-      message: "Internal Server Error",
-    });
+    console.error("GitHub OAuth error:", error.response?.data || error.message);
+    return res.redirect(`${FRONTEND_URL}/?error=server_error`);
   }
 };
 
@@ -146,23 +106,15 @@ const me = async (req, res) => {
     },
   });
   return res.json({ user });
-};
+}; 
 
 const logout = async (req, res) => {
   res.clearCookie("token", {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
-    sameSite: "strict",
+    sameSite: process.env.NODE_ENV === "production" ? "strict" : "lax",
   });
-
-  return res.json({
-    message: "Logged out",
-  });
+  return res.json({ message: "Logged out" });
 };
 
-module.exports = {
-  githubLogin,
-  githubCallback,
-  me,
-  logout,
-};
+module.exports = { githubLogin, githubCallback, me, logout };

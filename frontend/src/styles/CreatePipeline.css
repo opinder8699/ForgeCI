@@ -1,0 +1,136 @@
+@import "./theme.css";
+ 
+.page-content.narrow {
+  max-width: 680px;
+}
+ 
+.pipeline-form {
+  padding: 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+ 
+.form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+ 
+.form-field > span:first-child {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+ 
+.form-field input {
+  background: rgba(15, 23, 42, 0.5);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  color: var(--text-primary);
+  font-size: 0.92rem;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.2s ease;
+}
+ 
+.form-field input:focus {
+  border-color: var(--accent-purple);
+}
+ 
+.form-hint {
+  font-size: 0.76rem;
+  color: var(--text-faint);
+}
+ 
+.form-hint code {
+  font-family: ui-monospace, "Consolas", monospace;
+  font-size: 0.76rem;
+  background: rgba(255, 255, 255, 0.06);
+  padding: 1px 5px;
+  border-radius: 4px;
+  color: var(--text-muted);
+}
+ 
+/* YAML editor */
+.yaml-editor-wrap {
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  transition: border-color 0.2s ease;
+}
+ 
+.yaml-editor-wrap:focus-within {
+  border-color: var(--accent-purple);
+}
+ 
+.yaml-editor-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid var(--border-softer);
+}
+ 
+.yaml-lang {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  color: var(--text-faint);
+  text-transform: uppercase;
+}
+ 
+.yaml-reset-btn {
+  border: none;
+  background: none;
+  color: var(--accent-purple);
+  font-size: 0.76rem;
+  cursor: pointer;
+  padding: 0;
+  opacity: 0.8;
+  transition: opacity 0.2s ease;
+}
+ 
+.yaml-reset-btn:hover {
+  opacity: 1;
+}
+ 
+.yaml-textarea {
+  display: block;
+  width: 100%;
+  background: rgba(2, 6, 15, 0.5);
+  border: none;
+  outline: none;
+  padding: 14px 16px;
+  color: var(--text-secondary);
+  font-family: ui-monospace, "Consolas", monospace;
+  font-size: 0.84rem;
+  line-height: 1.65;
+  resize: vertical;
+  tab-size: 2;
+}
+ 
+.form-error {
+  color: var(--error);
+  font-size: 0.85rem;
+  margin: 0;
+  padding: 10px 14px;
+  background: var(--error-bg);
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+}
+ 
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 8px;
+}
+ 
+.btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}

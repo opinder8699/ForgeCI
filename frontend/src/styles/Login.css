@@ -1,0 +1,274 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+ 
+.login-container {
+  min-height: 100vh;
+  background: #0f172a;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  overflow: hidden;
+  position: relative;
+}
+ 
+.background-grid {
+  position: absolute;
+  inset: 0;
+ 
+  background-image: linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+ 
+  background-size: 40px 40px;
+ 
+  animation: moveGrid 15s linear infinite;
+}
+ 
+@keyframes moveGrid {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(40px);
+  }
+}
+ 
+/* Soft ambient glow orbs behind the card for depth */
+.glow-orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(90px);
+  opacity: 0.35;
+  pointer-events: none;
+}
+ 
+.glow-orb-1 {
+  width: 420px;
+  height: 420px;
+  background: #2563eb;
+  top: -120px;
+  left: -120px;
+  animation: drift1 9s ease-in-out infinite;
+}
+ 
+.glow-orb-2 {
+  width: 380px;
+  height: 380px;
+  background: #7c3aed;
+  bottom: -140px;
+  right: -100px;
+  animation: drift2 11s ease-in-out infinite;
+}
+ 
+@keyframes drift1 {
+  0%, 100% { transform: translate(0, 0); }
+  50% { transform: translate(40px, 30px); }
+}
+ 
+@keyframes drift2 {
+  0%, 100% { transform: translate(0, 0); }
+  50% { transform: translate(-30px, -25px); }
+}
+ 
+.login-card {
+  width: 450px;
+ 
+  backdrop-filter: blur(18px);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 24px;
+  padding: 50px;
+  text-align: center;
+  position: relative;
+  z-index: 10;
+ 
+  box-shadow: 0 0 30px rgba(59, 130, 246, 0.15);
+ 
+  animation: floatCard 4s ease-in-out infinite;
+}
+ 
+@keyframes floatCard {
+  0% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+  100% {
+    transform: translateY(0);
+  }
+}
+ 
+.logo-mark {
+  width: 56px;
+  height: 56px;
+  margin: 0 auto 18px;
+  border-radius: 16px;
+ 
+  display: flex;
+  align-items: center;
+  justify-content: center;
+ 
+  background: linear-gradient(135deg, #2563eb, #7c3aed);
+  box-shadow: 0 8px 20px rgba(124, 58, 237, 0.35);
+}
+ 
+.logo-mark svg {
+  width: 28px;
+  height: 28px;
+  color: white;
+}
+ 
+.logo-section h1 {
+  color: white;
+  font-size: 3rem;
+  font-weight: 700;
+  margin-bottom: 12px;
+  letter-spacing: 2px;
+}
+ 
+.logo-section p {
+  color: #94a3b8;
+  margin-bottom: 40px;
+  font-size: 1rem;
+}
+ 
+.github-btn {
+  width: 100%;
+  border: none;
+  padding: 16px;
+  border-radius: 14px;
+ 
+  background: linear-gradient(135deg, #2563eb, #7c3aed);
+  color: white;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+ 
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+ 
+  transition: all 0.35s ease;
+}
+ 
+.github-icon {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+ 
+.github-btn:hover {
+  transform: translateY(-4px) scale(1.02);
+  box-shadow: 0 10px 30px rgba(59, 130, 246, 0.45);
+}
+ 
+.github-btn:active {
+  transform: scale(0.98);
+}
+ 
+/* Divider between the CTA and the feature list */
+.divider {
+  display: flex;
+  align-items: center;
+  margin: 32px 0 22px;
+  color: #64748b;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+ 
+.divider::before,
+.divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.1);
+}
+ 
+.divider span {
+  padding: 0 14px;
+  white-space: nowrap;
+}
+ 
+.features {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+ 
+.feature {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+ 
+  text-align: left;
+  padding: 14px 16px;
+  border-radius: 14px;
+ 
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+ 
+  transition: all 0.3s ease;
+}
+ 
+.feature:hover {
+  background: rgba(255, 255, 255, 0.09);
+  border-color: rgba(124, 58, 237, 0.35);
+  transform: translateX(6px);
+}
+ 
+.feature-icon {
+  width: 38px;
+  height: 38px;
+  flex-shrink: 0;
+  border-radius: 10px;
+ 
+  display: flex;
+  align-items: center;
+  justify-content: center;
+ 
+  background: rgba(124, 58, 237, 0.15);
+  color: #a78bfa;
+}
+ 
+.feature-icon svg {
+  width: 19px;
+  height: 19px;
+}
+ 
+.feature-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+ 
+.feature-title {
+  color: #e2e8f0;
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+ 
+.feature-subtitle {
+  color: #64748b;
+  font-size: 0.78rem;
+}
+ 
+@media (max-width: 600px) {
+  .login-card {
+    width: 92%;
+    padding: 35px;
+  }
+ 
+  .logo-section h1 {
+    font-size: 2.2rem;
+  }
+ 
+  .glow-orb {
+    display: none;
+  }
+}
