@@ -13,60 +13,162 @@
   color: var(--text-primary);
 }
 
-.pipeline-meta {
+.page-header {
   display: flex;
-  gap: 40px;
-  padding: 22px 26px;
-  margin-bottom: 36px;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 28px;
   flex-wrap: wrap;
 }
 
-.pipeline-meta > div {
+.page-header h1 {
+  font-size: 1.8rem;
+  font-weight: 700;
+  margin: 0 0 6px;
+}
+
+.page-subtitle {
+  color: var(--text-muted);
+  font-size: 0.92rem;
+  margin: 0;
+}
+
+.pipeline-repo-url {
+  font-family: ui-monospace, "Consolas", monospace;
+  font-size: 0.82rem;
+}
+
+.page-header-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.btn-danger {
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  padding: 10px 18px;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--error);
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-danger:hover {
+  background: var(--error-bg);
+  border-color: var(--error);
+}
+
+.btn-danger:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.inline-error {
+  color: var(--error);
+  font-size: 0.85rem;
+  padding: 10px 14px;
+  background: var(--error-bg);
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  margin-bottom: 16px;
+}
+
+.inline-error p { margin: 0; }
+
+.pipeline-meta {
+  display: flex;
+  gap: 0;
+  padding: 0;
+  margin-bottom: 36px;
+  overflow: hidden;
+  flex-wrap: wrap;
+}
+
+.meta-item {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  padding: 20px 28px;
+  border-right: 1px solid var(--border-softer);
+  flex: 1;
+  min-width: 120px;
+}
+
+.meta-item:last-child {
+  border-right: none;
 }
 
 .meta-label {
-  font-size: 0.72rem;
+  font-size: 0.7rem;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.6px;
   color: var(--text-faint);
   font-weight: 600;
 }
 
 .meta-value {
   color: var(--text-primary);
-  font-size: 0.92rem;
+  font-size: 0.9rem;
 }
 
-.meta-value.mono {
-  font-family: ui-monospace, "Consolas", monospace;
-  font-size: 0.82rem;
-  color: var(--text-secondary);
+.branch-tag {
+  background: rgba(124, 58, 237, 0.12);
+  color: var(--accent-purple);
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  display: inline-block;
 }
 
 .section-title {
-  font-size: 1.1rem;
+  font-size: 1.05rem;
   font-weight: 600;
-  margin: 0 0 16px;
+  margin: 0 0 14px;
   color: var(--text-primary);
 }
+
+.state-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 60px 24px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.error-block { color: var(--error); }
+
+.empty-block { padding: 48px 24px; }
 
 .run-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
+}
+
+.run-row-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
 }
 
 .run-row {
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: 18px;
   padding: 14px 20px;
   text-decoration: none;
   color: inherit;
   transition: all 0.2s ease;
+  flex: 1;
+  border-radius: var(--radius-md);
 }
 
 .run-row:hover {
@@ -91,4 +193,185 @@
   font-size: 0.82rem;
   min-width: 40px;
   text-align: right;
+}
+
+.run-delete-btn {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--text-faint);
+  font-size: 0.8rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: all 0.2s ease;
+  margin-left: 8px;
+}
+
+.run-row-wrapper:hover .run-delete-btn {
+  opacity: 1;
+}
+
+.run-delete-btn:hover {
+  background: var(--error-bg);
+  color: var(--error);
+}
+
+/* Modal */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.modal {
+  width: 100%;
+  max-width: 640px;
+  max-height: 90vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--border-softer);
+}
+
+.modal-header h2 {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.modal-close {
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  font-size: 1rem;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  transition: all 0.2s;
+}
+
+.modal-close:hover {
+  color: var(--text-primary);
+  background: var(--bg-card-soft);
+}
+
+.modal-body {
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* Shared form-field styles (used in modal too) */
+.form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.form-field > span:first-child {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.form-field input {
+  background: rgba(15, 23, 42, 0.5);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  color: var(--text-primary);
+  font-size: 0.92rem;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.2s ease;
+}
+
+.form-field input:focus {
+  border-color: var(--accent-purple);
+}
+
+.yaml-editor-wrap {
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  transition: border-color 0.2s ease;
+}
+
+.yaml-editor-wrap:focus-within {
+  border-color: var(--accent-purple);
+}
+
+.yaml-editor-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid var(--border-softer);
+}
+
+.yaml-lang {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  color: var(--text-faint);
+  text-transform: uppercase;
+}
+
+.yaml-textarea {
+  display: block;
+  width: 100%;
+  background: rgba(2, 6, 15, 0.5);
+  border: none;
+  outline: none;
+  padding: 14px 16px;
+  color: var(--text-secondary);
+  font-family: ui-monospace, "Consolas", monospace;
+  font-size: 0.84rem;
+  line-height: 1.65;
+  resize: vertical;
+  tab-size: 2;
+}
+
+.form-error {
+  color: var(--error);
+  font-size: 0.85rem;
+  margin: 0;
+  padding: 10px 14px;
+  background: var(--error-bg);
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+}
+
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.btn-primary:disabled,
+.btn-secondary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
 }

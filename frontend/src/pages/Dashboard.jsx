@@ -19,6 +19,7 @@ function Dashboard() {
   const [pipelines, setPipelines] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [deletingId, setDeletingId] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -34,7 +35,7 @@ function Dashboard() {
           setError(
             err?.response?.status === 401
               ? "Your session expired. Please log in again."
-              : "Couldn't reach the backend yet — this will populate once it's connected."
+              : `Failed to load pipelines: ${err?.response?.data?.message ?? err.message}`
           );
         }
       } finally {
@@ -43,10 +44,22 @@ function Dashboard() {
     }
 
     loadPipelines();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, []);
+
+  const handleDelete = async (e, pipelineId) => {
+    e.preventDefault(); // don't follow the card link
+    if (!confirm("Delete this pipeline and all its run history?")) return;
+    setDeletingId(pipelineId);
+    try {
+      await api.delete(`/pipelines/${pipelineId}`);
+      setPipelines((prev) => prev.filter((p) => p.id !== pipelineId));
+    } catch (err) {
+      alert(err?.response?.data?.message ?? "Failed to delete pipeline.");
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   return (
     <div className="app-shell">
@@ -79,6 +92,7 @@ function Dashboard() {
 
         {!loading && !error && pipelines.length === 0 && (
           <div className="state-block empty-block glass-card">
+            <div className="empty-icon">⚡</div>
             <h3>No pipelines yet</h3>
             <p>Connect a repository to trigger your first automated build.</p>
             <Link to="/pipelines/new" className="btn-primary">
@@ -90,17 +104,27 @@ function Dashboard() {
         {!loading && !error && pipelines.length > 0 && (
           <div className="pipeline-grid">
             {pipelines.map((p) => (
-              <Link to={`/pipelines/${p.id}`} key={p.id} className="pipeline-card glass-card">
-                <div className="pipeline-card-top">
-                  <h3>{p.name}</h3>
-                  <StatusBadge status={p.lastRunStatus} />
-                </div>
-                <p className="pipeline-repo">{p.repoFullName ?? p.repo}</p>
-                <div className="pipeline-card-footer">
-                  <span>{p.branch ?? "main"}</span>
-                  <span>{p.lastRunAt ? new Date(p.lastRunAt).toLocaleString() : "Never run"}</span>
-                </div>
-              </Link>
+              <div key={p.id} className="pipeline-card-wrapper">
+                <Link to={`/pipelines/${p.id}`} className="pipeline-card glass-card">
+                  <div className="pipeline-card-top">
+                    <h3>{p.name}</h3>
+                    <StatusBadge status={p.lastRunStatus} />
+                  </div>
+                  <p className="pipeline-repo">{p.repoUrl}</p>
+                  <div className="pipeline-card-footer">
+                    <span className="branch-tag">⎇ {p.branch ?? "main"}</span>
+                    <span>{p.lastRunAt ? new Date(p.lastRunAt).toLocaleString() : "Never run"}</span>
+                  </div>
+                </Link>
+                <button
+                  className="pipeline-delete-btn"
+                  onClick={(e) => handleDelete(e, p.id)}
+                  disabled={deletingId === p.id}
+                  title="Delete pipeline"
+                >
+                  {deletingId === p.id ? "…" : "✕"}
+                </button>
+              </div>
             ))}
           </div>
         )}

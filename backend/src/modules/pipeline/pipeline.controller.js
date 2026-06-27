@@ -4,14 +4,13 @@ const validatePipeline = require("../../utils/validatePipeline");
 const registerWebhook = require("../../utils/registerWebhook.js");
 const deleteWebhook = require("../../utils/deleteWebhook.js");
 const { decrypt } = require("../../utils/encryption.js");
-const pipelineQueue=require("../queue/pipeline.queue.js")
+const pipelineQueue = require("../queue/pipeline.queue.js");
 
 exports.createPipeline = async (req, res) => {
   try {
     const { repoUrl, yamlConfig } = req.body;
 
     const parsedConfig = parsePipeline(yamlConfig);
-
     validatePipeline(parsedConfig);
 
     const pipeline = await prisma.pipeline.create({
@@ -24,60 +23,40 @@ exports.createPipeline = async (req, res) => {
       },
     });
 
-    const user = await prisma.user.findUnique({
-      where: {
-        id: req.user.userId,
-      },
-    });
+    // Skip webhook registration in local dev — GitHub can't reach localhost
+    if (process.env.NODE_ENV === "production") {
+      const user = await prisma.user.findUnique({ where: { id: req.user.userId } });
+      const accessToken = decrypt(user.githubAccessToken);
+      let webhookId = null;
 
-    const accessToken = decrypt(user.githubAccessToken);
-
-    let webhookId = null;
-
-    try {
-      webhookId = await registerWebhook(repoUrl, accessToken);
-
-      await prisma.pipeline.update({
-        where: {
-          id: pipeline.id,
-        },
-        data: {
-          webhookId: String(webhookId),
-        },
-      });
-    } catch (error) {
-      if (webhookId) {
-        try {
-          await deleteWebhook(repoUrl, accessToken, webhookId);
-        } catch (cleanupError) {
-          // log it but don't throw — still need to delete pipeline
-          console.error("Failed to delete webhook:", cleanupError.message);
+      try {
+        webhookId = await registerWebhook(repoUrl, accessToken);
+        await prisma.pipeline.update({
+          where: { id: pipeline.id },
+          data: { webhookId: String(webhookId) },
+        });
+      } catch (error) {
+        if (webhookId) {
+          try {
+            await deleteWebhook(repoUrl, accessToken, webhookId);
+          } catch (cleanupError) {
+            console.error("Failed to delete webhook:", cleanupError.message);
+          }
         }
+        await prisma.pipeline.delete({ where: { id: pipeline.id } });
+        throw error;
       }
-
-      await prisma.pipeline.delete({
-        where: {
-          id: pipeline.id,
-        },
-      });
-
-      throw error;
+    } else {
+      console.log("[Dev] Skipping webhook registration — use manual trigger");
     }
 
-    return res.status(201).json({
-      success: true,
-      pipeline,
-    });
+    return res.status(201).json({ success: true, pipeline });
   } catch (error) {
-    if (
-      error.message.includes("Invalid YAML") ||
-      error.message.includes("required")
-    ) {
+    if (error.message.includes("Invalid YAML") || error.message.includes("required")) {
       return res.status(400).json({ success: false, message: error.message });
     }
-    return res
-      .status(500)
-      .json({ success: false,  message: "Internal Server Error"});
+    console.error(error);
+    return res.status(500).json({ success: false, message: "Internal Server Error" });
   }
 };
 
@@ -96,7 +75,6 @@ exports.getPipelines = async (req, res) => {
       },
     });
 
-    
     const result = pipelines.map((p) => ({
       id: p.id,
       name: p.name,
@@ -173,7 +151,6 @@ exports.getPipelineRuns = async (req, res) => {
       },
     });
 
-    // Derive duration from startedAt/completedAt if available
     const result = runs.map((r) => ({
       ...r,
       durationSeconds:
@@ -222,6 +199,109 @@ exports.triggerRun = async (req, res) => {
     return res.status(201).json({ run });
   } catch (error) {
     console.error(error.message);
-    return res.status(500).json({ message: "Internal Server Error"});
+    return res.status(500).json({ message: "Internal Server Error" });
+  }
+};
+
+// PUT /api/pipelines/:id
+exports.updatePipeline = async (req, res) => {
+  try {
+    const pipeline = await prisma.pipeline.findFirst({
+      where: { id: req.params.id, userId: req.user.userId },
+    });
+
+    if (!pipeline) {
+      return res.status(404).json({ message: "Pipeline not found" });
+    }
+
+    const { repoUrl, branch, yamlConfig } = req.body;
+
+    // If yamlConfig is being updated, validate it
+    if (yamlConfig) {
+      const parsed = parsePipeline(yamlConfig);
+      validatePipeline(parsed);
+    }
+
+    const updated = await prisma.pipeline.update({
+      where: { id: req.params.id },
+      data: {
+        ...(repoUrl && { repoUrl }),
+        ...(branch && { branch }),
+        ...(yamlConfig && { yamlConfig }),
+      },
+    });
+
+    return res.json({ success: true, pipeline: updated });
+  } catch (error) {
+    if (error.message.includes("Invalid YAML") || error.message.includes("required")) {
+      return res.status(400).json({ success: false, message: error.message });
+    }
+    console.error(error);
+    return res.status(500).json({ message: "Internal Server Error" });
+  }
+};
+
+// DELETE /api/pipelines/:id
+exports.deletePipeline = async (req, res) => {
+  try {
+    const pipeline = await prisma.pipeline.findFirst({
+      where: { id: req.params.id, userId: req.user.userId },
+    });
+
+    if (!pipeline) {
+      return res.status(404).json({ message: "Pipeline not found" });
+    }
+
+    // Clean up webhook in production
+    if (process.env.NODE_ENV === "production" && pipeline.webhookId) {
+      try {
+        const user = await prisma.user.findUnique({ where: { id: req.user.userId } });
+        const accessToken = decrypt(user.githubAccessToken);
+        await deleteWebhook(pipeline.repoUrl, accessToken, pipeline.webhookId);
+      } catch (err) {
+        console.error("Webhook cleanup failed:", err.message);
+      }
+    }
+
+    // Cascade delete: steps → runs → pipeline
+    await prisma.pipelineStep.deleteMany({
+      where: { run: { pipelineId: req.params.id } },
+    });
+    await prisma.pipelineRun.deleteMany({ where: { pipelineId: req.params.id } });
+    await prisma.pipeline.delete({ where: { id: req.params.id } });
+
+    return res.json({ success: true });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: "Internal Server Error" });
+  }
+};
+
+// DELETE /api/pipelines/:id/runs/:runId
+exports.deleteRun = async (req, res) => {
+  try {
+    const pipeline = await prisma.pipeline.findFirst({
+      where: { id: req.params.id, userId: req.user.userId },
+    });
+
+    if (!pipeline) {
+      return res.status(404).json({ message: "Pipeline not found" });
+    }
+
+    const run = await prisma.pipelineRun.findFirst({
+      where: { id: req.params.runId, pipelineId: req.params.id },
+    });
+
+    if (!run) {
+      return res.status(404).json({ message: "Run not found" });
+    }
+
+    await prisma.pipelineStep.deleteMany({ where: { runId: req.params.runId } });
+    await prisma.pipelineRun.delete({ where: { id: req.params.runId } });
+
+    return res.json({ success: true });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: "Internal Server Error" });
   }
 };

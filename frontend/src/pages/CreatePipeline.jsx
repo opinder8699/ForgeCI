@@ -5,19 +5,17 @@ import api from "../api/axios";
 import "../styles/theme.css";
 import "../styles/CreatePipeline.css";
 
-// Starter YAML template matching the backend schema:
-// name, steps[].name / image / command
 const YAML_TEMPLATE = `name: my-pipeline
- 
+
 steps:
   - name: Install dependencies
     image: node:18-alpine
     command: npm install
- 
+
   - name: Run tests
     image: node:18-alpine
     command: npm test
- 
+
   - name: Build
     image: node:18-alpine
     command: npm run build
@@ -27,6 +25,7 @@ function CreatePipeline() {
   const navigate = useNavigate();
   const [form, setForm] = useState({
     repoUrl: "",
+    branch: "main",
     yamlConfig: YAML_TEMPLATE,
   });
   const [submitting, setSubmitting] = useState(false);
@@ -73,13 +72,29 @@ function CreatePipeline() {
             <input
               type="text"
               name="repoUrl"
-              placeholder="https://github.com/opinder8699/ForgeCI"
+              placeholder="https://github.com/you/your-repo"
               value={form.repoUrl}
               onChange={handleChange}
               required
             />
             <span className="form-hint">
-              Full GitHub repo URL — a webhook will be registered on it
+              Full public GitHub URL — e.g.
+              https://github.com/opinder8699/ForgeCI
+            </span>
+          </label>
+
+          <label className="form-field">
+            <span>Branch</span>
+            <input
+              type="text"
+              name="branch"
+              placeholder="main"
+              value={form.branch}
+              onChange={handleChange}
+              required
+            />
+            <span className="form-hint">
+              The branch this pipeline watches and builds
             </span>
           </label>
 

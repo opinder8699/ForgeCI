@@ -3,7 +3,7 @@ const { createBullMQConnection, createRedisConnection } = require("../../config/
 const executeStep = require("../../utils/executeStep");
 const prisma = require("../../lib/prisma");
 const Docker = require("dockerode");
-
+const { Worker, UnrecoverableError } = require("bullmq");
 const docker = new Docker();
 const workerConnection = createBullMQConnection();
 const publisher = createRedisConnection();

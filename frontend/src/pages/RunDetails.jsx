@@ -1,9 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams, Link } from "react-router-dom";
+import { io } from "socket.io-client";
 import Navbar from "../components/Navbar";
 import api from "../api/axios";
 import "../styles/theme.css";
 import "../styles/RunDetails.css";
+
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 function StatusBadge({ status }) {
   const normalized = (status || "pending").toLowerCase();
@@ -21,7 +24,9 @@ function RunDetails() {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [live, setLive] = useState(false);
   const logsEndRef = useRef(null);
+  const socketRef = useRef(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -35,12 +40,46 @@ function RunDetails() {
           api.get(`/runs/${id}/logs`),
         ]);
         if (!cancelled) {
-          setRun(runRes.data.run ?? runRes.data);
-          setLogs(logsRes.data.logs ?? logsRes.data ?? []);
+          const runData = runRes.data.run ?? runRes.data;
+          setRun(runData);
+          const rawLogs = logsRes.data.logs ?? logsRes.data ?? [];
+          setLogs(rawLogs);
+
+          // If the run is still active, open a socket for live streaming
+          const isActive = ["running", "pending", "queued"].includes(
+            runData?.status?.toLowerCase(),
+          );
+          if (isActive) {
+            const socket = io(API_URL, { withCredentials: true });
+            socketRef.current = socket;
+
+            socket.on("connect", () => {
+              setLive(true);
+              socket.emit("watch-run", id);
+            });
+
+            socket.on("log", (data) => {
+              if (cancelled) return;
+              setLogs((prev) => [...prev, data]);
+              // Update run status if the worker signals completion
+              if (data.type === "RUN_COMPLETED") {
+                setRun((prev) => ({ ...prev, status: data.status }));
+                setLive(false);
+                socket.disconnect();
+              }
+            });
+
+            socket.on("disconnect", () => setLive(false));
+            socket.on("error", () => setLive(false));
+          }
         }
-      } catch {
+      } catch (err) {
         if (!cancelled) {
-          setError("Couldn't load this run yet — backend isn't connected.");
+          setError(
+            err?.response?.status === 404
+              ? "Run not found."
+              : `Failed to load run: ${err?.response?.data?.message ?? err.message}`,
+          );
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -48,19 +87,61 @@ function RunDetails() {
     }
 
     load();
+
     return () => {
       cancelled = true;
+      if (socketRef.current) {
+        socketRef.current.emit("unwatch-run", id);
+        socketRef.current.disconnect();
+      }
     };
-
-    // NOTE: once Socket.io is wired up, this is where we'll open a socket
-    // (e.g. `io(API_URL).on(`run:${id}:log`, appendLog)`) instead of /
-    // in addition to the one-time /logs fetch above, and push incoming
-    // lines into `logs` with setLogs(prev => [...prev, newLine]).
   }, [id]);
 
+  // Auto-scroll to bottom as new logs arrive
   useEffect(() => {
     logsEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [logs]);
+
+  const renderLog = (line, idx) => {
+    const msg = typeof line === "string" ? line : (line?.message ?? "");
+    const type = line?.type ?? "log";
+
+    if (type === "step_start") {
+      return (
+        <div key={idx} className="log-step-header">
+          <span>{msg}</span>
+        </div>
+      );
+    }
+    if (type === "step_end") {
+      const success = msg.toLowerCase().includes("success");
+      return (
+        <div key={idx} className={`log-step-end ${success ? "ok" : "fail"}`}>
+          {msg}
+        </div>
+      );
+    }
+    if (type === "RUN_COMPLETED") {
+      return (
+        <div
+          key={idx}
+          className={`log-run-end ${line.status === "SUCCESS" ? "ok" : "fail"}`}
+        >
+          Pipeline{" "}
+          {line.status === "SUCCESS"
+            ? "completed successfully ✓"
+            : `failed: ${line.error ?? "unknown error"}`}
+        </div>
+      );
+    }
+
+    return (
+      <div key={idx} className="log-line">
+        <span className="log-line-number">{idx + 1}</span>
+        <span className="log-line-text">{msg}</span>
+      </div>
+    );
+  };
 
   return (
     <div className="app-shell">
@@ -70,7 +151,7 @@ function RunDetails() {
       <div className="page-content">
         {run && (
           <Link to={`/pipelines/${run.pipelineId}`} className="back-link">
-            ← Back to pipeline
+            ← Back to {run.pipelineName ?? "pipeline"}
           </Link>
         )}
 
@@ -91,9 +172,15 @@ function RunDetails() {
           <>
             <div className="page-header">
               <div>
-                <h1>Run #{run.id}</h1>
+                <h1>
+                  Run <span className="run-id-mono">#{run.id.slice(0, 8)}</span>
+                </h1>
                 <p className="page-subtitle">
-                  {run.createdAt ? new Date(run.createdAt).toLocaleString() : ""}
+                  {run.pipelineName && <span>{run.pipelineName} · </span>}
+                  {run.createdAt
+                    ? new Date(run.createdAt).toLocaleString()
+                    : ""}
+                  {run.durationSeconds != null && ` · ${run.durationSeconds}s`}
                 </p>
               </div>
               <StatusBadge status={run.status} />
@@ -104,19 +191,25 @@ function RunDetails() {
                 <span className="log-dot red"></span>
                 <span className="log-dot yellow"></span>
                 <span className="log-dot green"></span>
-                <span className="log-console-title">build output</span>
-                {run.status === "running" && <span className="live-indicator">● live</span>}
+                <span className="log-console-title">Output</span>
+                {live && (
+                  <span className="live-indicator">
+                    <span className="live-pulse"></span>
+                    live
+                  </span>
+                )}
               </div>
               <div className="log-console-body">
                 {logs.length === 0 ? (
-                  <p className="log-empty">No log output yet.</p>
+                  <p className="log-empty">
+                    {["running", "pending", "queued"].includes(
+                      run.status?.toLowerCase(),
+                    )
+                      ? "Waiting for logs…"
+                      : "No log output."}
+                  </p>
                 ) : (
-                  logs.map((line, idx) => (
-                    <div key={idx} className="log-line">
-                      <span className="log-line-number">{idx + 1}</span>
-                      <span className="log-line-text">{typeof line === "string" ? line : line.message}</span>
-                    </div>
-                  ))
+                  logs.map(renderLog)
                 )}
                 <div ref={logsEndRef} />
               </div>

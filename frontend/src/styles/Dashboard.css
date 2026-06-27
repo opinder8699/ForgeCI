@@ -40,6 +40,11 @@
   padding: 56px 24px;
 }
 
+.empty-icon {
+  font-size: 2.5rem;
+  margin-bottom: 4px;
+}
+
 .empty-block h3 {
   color: var(--text-primary);
   margin: 0 0 8px;
@@ -49,10 +54,15 @@
   margin: 0 0 20px;
 }
 
+/* Card wrapper — holds card + delete button */
 .pipeline-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
   gap: 16px;
+}
+
+.pipeline-card-wrapper {
+  position: relative;
 }
 
 .pipeline-card {
@@ -61,6 +71,7 @@
   text-decoration: none;
   color: inherit;
   transition: all 0.25s ease;
+  height: 100%;
 }
 
 .pipeline-card:hover {
@@ -86,9 +97,12 @@
 
 .pipeline-repo {
   color: var(--text-muted);
-  font-size: 0.84rem;
+  font-size: 0.82rem;
   margin: 0 0 18px;
   font-family: ui-monospace, "Consolas", monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .pipeline-card-footer {
@@ -96,4 +110,44 @@
   justify-content: space-between;
   font-size: 0.78rem;
   color: var(--text-faint);
+  align-items: center;
+}
+
+.branch-tag {
+  background: rgba(124, 58, 237, 0.12);
+  color: var(--accent-purple);
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+/* Delete button — appears top-right, outside the Link */
+.pipeline-delete-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--text-faint);
+  font-size: 0.8rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: all 0.2s ease;
+  z-index: 2;
+}
+
+.pipeline-card-wrapper:hover .pipeline-delete-btn {
+  opacity: 1;
+}
+
+.pipeline-delete-btn:hover {
+  background: var(--error-bg);
+  color: var(--error);
 }

@@ -1,16 +1,19 @@
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/useAuth";
 import "../styles/Navbar.css";
- 
+
 function Navbar() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
- 
+  const location = useLocation();
+
   const handleLogout = async () => {
     await logout();
     navigate("/");
   };
- 
+
+  const isActive = (path) => location.pathname === path || location.pathname.startsWith(path + "/");
+
   return (
     <header className="navbar">
       <Link to="/dashboard" className="navbar-brand">
@@ -27,15 +30,27 @@ function Navbar() {
         </span>
         ForgeCI
       </Link>
- 
+
       <nav className="navbar-links">
-        <Link to="/dashboard">Dashboard</Link>
-        <Link to="/pipelines/new">New Pipeline</Link>
+        <Link to="/dashboard" className={isActive("/dashboard") ? "active" : ""}>
+          Dashboard
+        </Link>
+        <Link to="/pipelines/new" className={isActive("/pipelines/new") ? "active" : ""}>
+          New Pipeline
+        </Link>
+        <a
+          href="http://localhost:5000/admin/queues"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="navbar-queue-link"
+        >
+          Queue Monitor ↗
+        </a>
       </nav>
- 
+
       <div className="navbar-user">
         {user?.avatarUrl && <img src={user.avatarUrl} alt="" className="navbar-avatar" />}
-        <span className="navbar-username">{user?.username ?? user?.name ?? "Account"}</span>
+        <span className="navbar-username">{user?.username ?? user?.githubUsername ?? "Account"}</span>
         <button className="navbar-logout" onClick={handleLogout}>
           Log out
         </button>
@@ -43,5 +58,5 @@ function Navbar() {
     </header>
   );
 }
- 
+
 export default Navbar;

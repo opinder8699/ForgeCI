@@ -1,16 +1,70 @@
-@import "./theme.css";
+ @import "./theme.css";
 
+.back-link {
+  display: inline-block;
+  color: var(--text-muted);
+  text-decoration: none;
+  font-size: 0.85rem;
+  margin-bottom: 20px;
+  transition: color 0.2s ease;
+}
+
+.back-link:hover {
+  color: var(--text-primary);
+}
+
+.page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 28px;
+  flex-wrap: wrap;
+}
+
+.page-header h1 {
+  font-size: 1.8rem;
+  font-weight: 700;
+  margin: 0 0 6px;
+}
+
+.run-id-mono {
+  font-family: ui-monospace, "Consolas", monospace;
+  font-size: 1.4rem;
+  color: var(--text-secondary);
+}
+
+.page-subtitle {
+  color: var(--text-muted);
+  font-size: 0.88rem;
+  margin: 0;
+}
+
+.state-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 80px 24px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.error-block { color: var(--error); }
+
+/* Terminal */
 .log-console {
   overflow: hidden;
-  margin-top: 24px;
+  margin-top: 4px;
 }
 
 .log-console-header {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 12px 18px;
-  background: rgba(255, 255, 255, 0.04);
+  padding: 11px 18px;
+  background: rgba(255, 255, 255, 0.03);
   border-bottom: 1px solid var(--border-softer);
 }
 
@@ -20,23 +74,16 @@
   border-radius: 50%;
 }
 
-.log-dot.red {
-  background: #ef4444;
-}
-
-.log-dot.yellow {
-  background: #f59e0b;
-}
-
-.log-dot.green {
-  background: #22c55e;
-}
+.log-dot.red    { background: #ef4444; }
+.log-dot.yellow { background: #f59e0b; }
+.log-dot.green  { background: #22c55e; }
 
 .log-console-title {
   margin-left: 8px;
-  font-size: 0.78rem;
+  font-size: 0.75rem;
   color: var(--text-faint);
   font-family: ui-monospace, "Consolas", monospace;
+  letter-spacing: 0.5px;
 }
 
 .live-indicator {
@@ -44,23 +91,41 @@
   font-size: 0.72rem;
   color: var(--running);
   font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.live-pulse {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--running);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.4; transform: scale(0.8); }
 }
 
 .log-console-body {
-  padding: 18px 20px;
-  max-height: 480px;
+  padding: 16px 20px;
+  max-height: 560px;
   overflow-y: auto;
   font-family: ui-monospace, "Consolas", monospace;
-  font-size: 0.84rem;
-  line-height: 1.6;
-  background: rgba(2, 6, 15, 0.4);
+  font-size: 0.82rem;
+  line-height: 1.65;
+  background: rgba(2, 6, 15, 0.5);
 }
 
 .log-empty {
   color: var(--text-faint);
   margin: 0;
+  font-style: italic;
 }
 
+/* Normal log line */
 .log-line {
   display: flex;
   gap: 16px;
@@ -71,11 +136,47 @@
   user-select: none;
   min-width: 28px;
   text-align: right;
-  opacity: 0.5;
+  opacity: 0.4;
+  flex-shrink: 0;
 }
 
 .log-line-text {
-  color: var(--text-secondary);
+  color: #c9d1d9;
   white-space: pre-wrap;
   word-break: break-all;
 }
+
+/* Step separator rows */
+.log-step-header {
+  color: #7dd3fc;
+  font-weight: 600;
+  padding: 10px 0 4px;
+  border-top: 1px solid rgba(255,255,255,0.06);
+  margin-top: 6px;
+}
+
+.log-step-header:first-child {
+  border-top: none;
+  margin-top: 0;
+  padding-top: 0;
+}
+
+.log-step-end {
+  font-size: 0.78rem;
+  padding: 4px 0 10px;
+  font-weight: 500;
+}
+
+.log-step-end.ok   { color: var(--success); }
+.log-step-end.fail { color: var(--error); }
+
+.log-run-end {
+  padding: 12px 0 0;
+  border-top: 1px solid rgba(255,255,255,0.06);
+  margin-top: 6px;
+  font-weight: 700;
+  font-size: 0.85rem;
+}
+
+.log-run-end.ok   { color: var(--success); }
+.log-run-end.fail { color: var(--error); }

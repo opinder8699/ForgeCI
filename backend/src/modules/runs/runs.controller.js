@@ -5,7 +5,9 @@ exports.getRunById = async (req, res) => {
   try {
     const run = await prisma.pipelineRun.findUnique({
       where: { id: req.params.id },
-      include: { pipeline: { select: { userId: true, name: true } } },
+      include: {
+        pipeline: { select: { userId: true, name: true, branch: true } },
+      },
     });
 
     if (!run || run.pipeline.userId !== req.user.userId) {
@@ -16,7 +18,7 @@ exports.getRunById = async (req, res) => {
       run: {
         id: run.id,
         status: run.status,
-        branch: run.branch,
+        branch: run.pipeline.branch,
         pipelineId: run.pipelineId,
         pipelineName: run.pipeline.name,
         createdAt: run.createdAt,
@@ -48,7 +50,6 @@ exports.getRunLogs = async (req, res) => {
           select: {
             id: true,
             name: true,
-            command: true,
             status: true,
             logs: true,
             order: true,
@@ -69,17 +70,20 @@ exports.getRunLogs = async (req, res) => {
         type: "step_start",
         message: `▶ Step ${step.order}: ${step.name}`,
         stepId: step.id,
+        stepStatus: step.status,
       });
       if (step.logs) {
         step.logs.split("\n").forEach((line) => {
-          if (line.trim())
+          if (line.trim()) {
             lines.push({ type: "log", message: line, stepId: step.id });
+          }
         });
       }
       lines.push({
         type: "step_end",
-        message: `✓ ${step.name} [${step.status}]`,
+        message: `${step.status === "SUCCESS" ? "✓" : "✗"} ${step.name} [${step.status?.toLowerCase()}]`,
         stepId: step.id,
+        stepStatus: step.status,
       });
       return lines;
     });
@@ -88,5 +92,27 @@ exports.getRunLogs = async (req, res) => {
   } catch (error) {
     console.error(error);
     return res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+// DELETE /api/runs/:id
+exports.deleteRun = async (req, res) => {
+  try {
+    const run = await prisma.pipelineRun.findUnique({
+      where: { id: req.params.id },
+      include: { pipeline: { select: { userId: true } } },
+    });
+
+    if (!run || run.pipeline.userId !== req.user.userId) {
+      return res.status(404).json({ message: "Run not found" });
+    }
+
+    await prisma.pipelineStep.deleteMany({ where: { runId: req.params.id } });
+    await prisma.pipelineRun.delete({ where: { id: req.params.id } });
+
+    return res.json({ success: true });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: "Internal Server Error" });
   }
 };
