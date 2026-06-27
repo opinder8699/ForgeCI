@@ -39,7 +39,7 @@ function Navbar() {
           New Pipeline
         </Link>
         <a
-          href="http://localhost:5000/admin/queues"
+          href="https://51.21.217.91.nip.io/admin/queues"
           target="_blank"
           rel="noopener noreferrer"
           className="navbar-queue-link"
