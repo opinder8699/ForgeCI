@@ -1,5 +1,7 @@
 # ForgeCI
 
+**Live demo → [forge-ci.vercel.app](https://forge-ci.vercel.app)**
+
 A production-inspired CI/CD platform built from scratch. Define pipelines in YAML, push to GitHub, and watch your steps execute in real time inside isolated Docker containers — with live log streaming straight to the browser.
 
 Inspired by GitHub Actions. Built to understand what happens under the hood.
