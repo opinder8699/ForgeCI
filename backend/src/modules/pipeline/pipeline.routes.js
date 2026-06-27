@@ -15,7 +15,7 @@ const {
 router.get("/", auth, getPipelines);
 router.post("/", auth, createPipeline);
 router.get("/:id", auth, getPipelineById);
-router.put("/:id", auth, updatePipeline);
+router.patch("/:id", auth, updatePipeline);
 router.delete("/:id", auth, deletePipeline);
 router.get("/:id/runs", auth, getPipelineRuns);
 router.post("/:id/runs", auth, triggerRun);

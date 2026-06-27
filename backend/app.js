@@ -12,6 +12,8 @@ const bullBoard = require("./src/modules/bullboard/bullBoard");
 
 const app = express();
 
+const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:5173";
+
 app.use(
   helmet({
     contentSecurityPolicy: {
@@ -20,9 +22,9 @@ app.use(
         scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
         styleSrc: ["'self'", "'unsafe-inline'"],
         imgSrc: ["'self'", "data:"],
-        connectSrc: ["'self'"],
+        connectSrc: ["'self'", FRONTEND_URL, "ws:", "wss:"],
         fontSrc: ["'self'", "data:"],
-        frameSrc: ["'self'"],
+        frameSrc: ["'self'", FRONTEND_URL],
       },
     },
   }),
@@ -41,7 +43,6 @@ app.use(
 
 app.use(cookieParser());
 
-// Raw body for webhook HMAC — must come before express.json()
 app.use("/api/webhooks", express.raw({ type: "application/json" }));
 
 app.use(express.json());
