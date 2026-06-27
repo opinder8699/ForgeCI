@@ -23,31 +23,26 @@ exports.createPipeline = async (req, res) => {
       },
     });
 
-    // Skip webhook registration in local dev — GitHub can't reach localhost
-    if (process.env.NODE_ENV === "production") {
-      const user = await prisma.user.findUnique({ where: { id: req.user.userId } });
-      const accessToken = decrypt(user.githubAccessToken);
-      let webhookId = null;
+    const user = await prisma.user.findUnique({ where: { id: req.user.userId } });
+    const accessToken = decrypt(user.githubAccessToken);
+    let webhookId = null;
 
-      try {
-        webhookId = await registerWebhook(repoUrl, accessToken);
-        await prisma.pipeline.update({
-          where: { id: pipeline.id },
-          data: { webhookId: String(webhookId) },
-        });
-      } catch (error) {
-        if (webhookId) {
-          try {
-            await deleteWebhook(repoUrl, accessToken, webhookId);
-          } catch (cleanupError) {
-            console.error("Failed to delete webhook:", cleanupError.message);
-          }
+    try {
+      webhookId = await registerWebhook(repoUrl, accessToken);
+      await prisma.pipeline.update({
+        where: { id: pipeline.id },
+        data: { webhookId: String(webhookId) },
+      });
+    } catch (error) {
+      if (webhookId) {
+        try {
+          await deleteWebhook(repoUrl, accessToken, webhookId);
+        } catch (cleanupError) {
+          console.error("Failed to delete webhook:", cleanupError.message);
         }
-        await prisma.pipeline.delete({ where: { id: pipeline.id } });
-        throw error;
       }
-    } else {
-      console.log("[Dev] Skipping webhook registration — use manual trigger");
+      await prisma.pipeline.delete({ where: { id: pipeline.id } });
+      throw error;
     }
 
     return res.status(201).json({ success: true, pipeline });
