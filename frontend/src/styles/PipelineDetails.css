@@ -77,7 +77,14 @@
   margin-bottom: 16px;
 }
 
-.inline-error p { margin: 0; }
+.inline-error p {
+  margin: 0;
+}
+
+.meta-item .status-badge,
+.meta-item .branch-tag {
+  align-self: flex-start;
+}
 
 .pipeline-meta {
   display: flex;
@@ -87,7 +94,6 @@
   overflow: hidden;
   flex-wrap: wrap;
 }
-
 .meta-item {
   display: flex;
   flex-direction: column;
@@ -97,7 +103,6 @@
   flex: 1;
   min-width: 120px;
 }
-
 .meta-item:last-child {
   border-right: none;
 }
@@ -143,9 +148,13 @@
   text-align: center;
 }
 
-.error-block { color: var(--error); }
+.error-block {
+  color: var(--error);
+}
 
-.empty-block { padding: 48px 24px; }
+.empty-block {
+  padding: 48px 24px;
+}
 
 .run-list {
   display: flex;

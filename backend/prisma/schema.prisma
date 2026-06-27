@@ -45,6 +45,7 @@ model PipelineRun {
   pipelineId  String
   pipeline    Pipeline       @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
   steps       PipelineStep[]
+  cloneLogs  String?
   startedAt   DateTime?
   completedAt DateTime?
   createdAt   DateTime       @default(now())

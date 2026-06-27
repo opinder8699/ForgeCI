@@ -30,48 +30,111 @@ function RunDetails() {
 
   useEffect(() => {
     let cancelled = false;
+    let liveBuffer = [];
+    let historyLoaded = false;
+
+    const socket = io(API_URL, {
+      withCredentials: true,
+      transports: ["websocket", "polling"],
+      reconnectionAttempts: 5,
+    });
+    socketRef.current = socket;
+
+    socket.on("connect", () => {
+      if (cancelled) {
+        socket.disconnect();
+        return;
+      }
+      console.log("[Socket] Connected:", socket.id);
+      setLive(true);
+      socket.emit("watch-run", id);
+    });
+
+    socket.on("log", (data) => {
+      if (cancelled) return;
+
+      console.log("[Socket] log event:", JSON.stringify(data));
+
+      if (data.type === "RUN_COMPLETED") {
+        setRun((prev) => ({ ...prev, status: data.status }));
+        setLive(false);
+      }
+
+      const appendLog = (prev) => {
+        if (
+          data.type === "log" &&
+          data.stepId?.startsWith("clone-") &&
+          !prev.some(
+            (item) => item.type === "step_start" && item.stepId === data.stepId,
+          )
+        ) {
+          return [
+            ...prev,
+            {
+              type: "step_start",
+              stepId: data.stepId,
+              stepName: "Clone repository",
+              order: 0,
+            },
+            data,
+          ];
+        }
+
+        return [...prev, data];
+      };
+
+      if (!historyLoaded) {
+        liveBuffer = appendLog(liveBuffer);
+      } else {
+        setLogs((prev) => appendLog(prev));
+      }
+    });
+
+    socket.on("connect_error", (err) => {
+      console.error("[Socket] connect_error:", err.message);
+      setLive(false);
+    });
+
+    socket.on("disconnect", (reason) => {
+      console.log("[Socket] disconnected:", reason);
+      setLive(false);
+    });
 
     async function load() {
       setLoading(true);
       setError(null);
       try {
-        const [runRes, logsRes] = await Promise.all([
-          api.get(`/runs/${id}`),
-          api.get(`/runs/${id}/logs`),
-        ]);
-        if (!cancelled) {
-          const runData = runRes.data.run ?? runRes.data;
-          setRun(runData);
-          const rawLogs = logsRes.data.logs ?? logsRes.data ?? [];
-          setLogs(rawLogs);
+        const runRes = await api.get(`/runs/${id}`);
+        if (cancelled) return;
 
-          // If the run is still active, open a socket for live streaming
-          const isActive = ["running", "pending", "queued"].includes(
-            runData?.status?.toLowerCase(),
+        const runData = runRes.data.run ?? runRes.data;
+        setRun(runData);
+
+        const isActive = ["running", "pending", "queued"].includes(
+          runData?.status?.toLowerCase(),
+        );
+
+        if (isActive) {
+          console.log(
+            "[load] liveBuffer at flush:",
+            JSON.stringify(liveBuffer),
           );
-          if (isActive) {
-            const socket = io(API_URL, { withCredentials: true });
-            socketRef.current = socket;
-
-            socket.on("connect", () => {
-              setLive(true);
-              socket.emit("watch-run", id);
-            });
-
-            socket.on("log", (data) => {
-              if (cancelled) return;
-              setLogs((prev) => [...prev, data]);
-              // Update run status if the worker signals completion
-              if (data.type === "RUN_COMPLETED") {
-                setRun((prev) => ({ ...prev, status: data.status }));
-                setLive(false);
-                socket.disconnect();
-              }
-            });
-
-            socket.on("disconnect", () => setLive(false));
-            socket.on("error", () => setLive(false));
-          }
+          // Active run: don't touch the DB logs (they're empty mid-run).
+          // Flush whatever arrived in the socket buffer during the fetch,
+          // then let the socket handler append everything else live.
+          historyLoaded = true;
+          setLogs([...liveBuffer]);
+          liveBuffer = [];
+        } else {
+          // Completed run: DB has the full saved logs — fetch and render them.
+          const logsRes = await api.get(`/runs/${id}/logs`);
+          if (cancelled) return;
+          const rawLogs = logsRes.data.logs ?? logsRes.data ?? [];
+          historyLoaded = true;
+          setLogs(rawLogs);
+          liveBuffer = [];
+          setLive(false);
+          socket.disconnect();
         }
       } catch (err) {
         if (!cancelled) {
@@ -90,10 +153,12 @@ function RunDetails() {
 
     return () => {
       cancelled = true;
-      if (socketRef.current) {
-        socketRef.current.emit("unwatch-run", id);
-        socketRef.current.disconnect();
-      }
+      setTimeout(() => {
+        if (socketRef.current === socket) {
+          socket.emit("unwatch-run", id);
+          socket.disconnect();
+        }
+      }, 100);
     };
   }, [id]);
 
@@ -103,37 +168,58 @@ function RunDetails() {
   }, [logs]);
 
   const renderLog = (line, idx) => {
-    const msg = typeof line === "string" ? line : (line?.message ?? "");
-    const type = line?.type ?? "log";
+    const type = line?.type;
 
     if (type === "step_start") {
       return (
         <div key={idx} className="log-step-header">
-          <span>{msg}</span>
+          <span className="log-step-icon">▶</span>
+          <span>
+            Step {line.order ?? ""}: {line.stepName}
+          </span>
         </div>
       );
     }
+
     if (type === "step_end") {
-      const success = msg.toLowerCase().includes("success");
+      const success = line.status === "SUCCESS";
       return (
         <div key={idx} className={`log-step-end ${success ? "ok" : "fail"}`}>
-          {msg}
+          {success ? "✓" : "✗"} {line.stepName} [
+          {success ? "success" : "failed"}]
         </div>
       );
     }
+
     if (type === "RUN_COMPLETED") {
       return (
         <div
           key={idx}
           className={`log-run-end ${line.status === "SUCCESS" ? "ok" : "fail"}`}
         >
-          Pipeline{" "}
           {line.status === "SUCCESS"
-            ? "completed successfully ✓"
-            : `failed: ${line.error ?? "unknown error"}`}
+            ? "✓ Pipeline completed successfully"
+            : `✗ Pipeline failed: ${line.error ?? "unknown error"}`}
         </div>
       );
     }
+
+    // type === "log" — regular output line
+    // For legacy blob format {logs: "..."} split into lines
+    if (line?.logs && !line?.message) {
+      return line.logs
+        .split("\n")
+        .filter((l) => l.trim())
+        .map((l, i) => (
+          <div key={`${idx}-${i}`} className="log-line">
+            <span className="log-line-number">{idx + i + 1}</span>
+            <span className="log-line-text">{l.trimEnd()}</span>
+          </div>
+        ));
+    }
+
+    const msg = typeof line === "string" ? line : (line?.message ?? "");
+    if (!msg) return null;
 
     return (
       <div key={idx} className="log-line">
@@ -142,7 +228,6 @@ function RunDetails() {
       </div>
     );
   };
-
   return (
     <div className="app-shell">
       <div className="background-grid"></div>

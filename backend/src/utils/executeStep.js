@@ -7,46 +7,57 @@ async function pullImage(imageName) {
   return new Promise((resolve, reject) => {
     docker.pull(imageName, (err, stream) => {
       if (err) {
-        // Docker returns 404 for images that don't exist on the registry
-        if (err.statusCode === 404 || err.message?.includes("not found") || err.message?.includes("No such image")) {
+        if (
+          err.statusCode === 404 ||
+          err.message?.includes("not found") ||
+          err.message?.includes("No such image")
+        ) {
           return reject(
             new Error(
               `Image "${imageName}" not found on Docker Hub. ` +
-              `Check the image name in your YAML (e.g. node:18-alpine, python:3.11-slim).`
-            )
+                `Check the image name in your YAML (e.g. node:18-alpine, python:3.11-slim).`,
+            ),
           );
         }
-        return reject(new Error(`Failed to pull image "${imageName}": ${err.message}`));
+        return reject(
+          new Error(`Failed to pull image "${imageName}": ${err.message}`),
+        );
       }
 
-      // followProgress streams pull output and calls the callback when done
       docker.modem.followProgress(
         stream,
         (err) => {
-          if (err) {
-            return reject(new Error(`Image pull failed for "${imageName}": ${err.message}`));
-          }
+          if (err)
+            return reject(
+              new Error(`Image pull failed for "${imageName}": ${err.message}`),
+            );
           console.log(`[executeStep] Image ready: ${imageName}`);
           resolve();
         },
         (event) => {
-          // Log pull progress so worker console shows download activity
           if (event.status && event.progress) {
-            process.stdout.write(`\r[executeStep] ${event.status}: ${event.progress}   `);
+            process.stdout.write(
+              `\r[executeStep] ${event.status}: ${event.progress}   `,
+            );
           }
-        }
+        },
       );
     });
   });
 }
 
-async function executeStep(step, volumeName) {
+/**
+ * executeStep — runs one pipeline step inside a Docker container.
+ *
+ * @param {object} step        — { name, image, command }
+ * @param {string} volumeName  — named Docker volume shared across steps
+ * @param {function} onLog     — called with each line as it arrives (for live streaming)
+ */
+async function executeStep(step, volumeName, onLog) {
   console.log(`[executeStep] Starting: "${step.name}", image: ${step.image}`);
   let container;
 
   try {
-    // Auto-pull the image — if it's already local Docker skips download instantly.
-    // If it doesn't exist on the registry, throws a clear error shown to the user.
     await pullImage(step.image);
 
     const cmd = ["sh", "-c", step.command];
@@ -55,6 +66,7 @@ async function executeStep(step, volumeName) {
       Image: step.image,
       Cmd: ["sleep", "infinity"],
       WorkingDir: "/workspace",
+      Tty: false, // ← ensure binary stream so demuxStream works correctly
       HostConfig: {
         Memory: 100 * 1024 * 1024,
         MemorySwap: 100 * 1024 * 1024,
@@ -66,25 +78,47 @@ async function executeStep(step, volumeName) {
       },
     });
 
-    console.log(`[executeStep] Container created`);
     await container.start();
-    console.log(`[executeStep] Container started`);
 
     const exec = await container.exec({
-      Cmd: cmd,
+      Cmd: ["sh", "-c", step.command],
       AttachStdout: true,
       AttachStderr: true,
+      Tty: false,
     });
-
-    console.log(`[executeStep] Exec created, running command...`);
     const stream = await exec.start();
 
-    const stdout = [];
-    const stderr = [];
+    const allLines = [];
+
+    const lineBuffer = { stdout: "", stderr: "" };
+
+    function flushLines(buffer, key) {
+      const lines = buffer[key].split("\n");
+      // Keep last partial line in the buffer
+      buffer[key] = lines.pop();
+      for (const line of lines) {
+        const text = line.trimEnd();
+        if (text) {
+          allLines.push(text);
+          if (onLog) onLog(text);
+        }
+      }
+    }
+
     docker.modem.demuxStream(
       stream,
-      { write: (chunk) => stdout.push(chunk) },
-      { write: (chunk) => stderr.push(chunk) }
+      {
+        write: (chunk) => {
+          lineBuffer.stdout += chunk.toString();
+          flushLines(lineBuffer, "stdout");
+        },
+      },
+      {
+        write: (chunk) => {
+          lineBuffer.stderr += chunk.toString();
+          flushLines(lineBuffer, "stderr");
+        },
+      },
     );
 
     let timeout;
@@ -92,7 +126,9 @@ async function executeStep(step, volumeName) {
       stream.on("end", resolve);
       stream.on("error", reject);
       timeout = setTimeout(async () => {
-        try { await container.kill(); } catch {}
+        try {
+          await container.kill();
+        } catch {}
         reject(new Error("STEP_TIMEOUT"));
       }, 60000);
     });
@@ -102,8 +138,10 @@ async function executeStep(step, volumeName) {
       clearTimeout(timeout);
     } catch (err) {
       if (err.message === "STEP_TIMEOUT") {
+        const msg = `Step "${step.name}" timed out after 60 seconds.`;
+        if (onLog) onLog(msg);
         return {
-          logs: `Step "${step.name}" timed out after 60 seconds.`,
+          logs: [...allLines, msg].join("\n"),
           exitCode: -1,
           timedOut: true,
         };
@@ -111,21 +149,27 @@ async function executeStep(step, volumeName) {
       throw err;
     }
 
-    const output = Buffer.concat(stdout).toString();
-    const errorOutput = Buffer.concat(stderr).toString();
-    const result = await exec.inspect();
+    if (lineBuffer.stdout.trim()) {
+      allLines.push(lineBuffer.stdout.trim());
+      if (onLog) onLog(lineBuffer.stdout.trim());
+    }
+    if (lineBuffer.stderr.trim()) {
+      allLines.push(lineBuffer.stderr.trim());
+      if (onLog) onLog(lineBuffer.stderr.trim());
+    }
 
-    console.log(`[executeStep] Step "${step.name}" finished with exit code ${result.ExitCode}`);
+    const result = await exec.inspect();
+    console.log(
+      `[executeStep] "${step.name}" finished with exit code ${result.ExitCode}`,
+    );
 
     return {
-      logs: `${output}${errorOutput}`.trim(),
+      logs: allLines.join("\n"),
       exitCode: result.ExitCode,
     };
   } catch (err) {
     console.error(`[executeStep] Error in step "${step.name}":`, err.message);
-
-    // Surface the full error message so it gets saved to the DB
-    // and shown to the user in the RunDetails log console
+    if (onLog) onLog(`Error: ${err.message}`);
     return {
       logs: err.message,
       exitCode: -1,

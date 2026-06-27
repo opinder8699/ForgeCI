@@ -12,7 +12,6 @@ const bullBoard = require("./src/modules/bullboard/bullBoard");
 
 const app = express();
 
-// Relax helmet CSP so BullBoard iframe and its assets load correctly
 app.use(
   helmet({
     contentSecurityPolicy: {
@@ -31,7 +30,11 @@ app.use(
 
 app.use(
   cors({
-    origin: process.env.FRONTEND_URL || "http://localhost:5173",
+    origin: [
+      process.env.FRONTEND_URL,
+      "http://localhost:5173",
+      "http://localhost:3000",
+    ].filter(Boolean),
     credentials: true,
   }),
 );

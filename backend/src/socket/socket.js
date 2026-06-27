@@ -2,13 +2,18 @@ const { Server } = require("socket.io");
 const cookie = require("cookie");
 const jwt = require("jsonwebtoken");
 const { createRedisConnection } = require("../config/redis");
-const prisma=require("../lib/prisma")
+const prisma = require("../lib/prisma");
 
 function setupSocket(httpServer) {
   const io = new Server(httpServer, {
     cors: {
-      origin: process.env.FRONTEND_URL,
-      credentials: true, // allows cookies to be sent cross-origin
+      origin: [
+        process.env.FRONTEND_URL,
+        "http://localhost:5173",
+        "http://localhost:3000",
+      ].filter(Boolean),
+      credentials: true,
+      methods: ["GET", "POST"],
     },
   });
 
